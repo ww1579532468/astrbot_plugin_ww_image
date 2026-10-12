@@ -1,0 +1,23 @@
+{
+  "base_url": {
+    "description": "绘图 API 地址",
+    "type": "string",
+    "hint": "OpenAI 兼容接口地址，例如 https://api.openai.com/v1"
+  },
+  "api_key": {
+    "description": "API Key",
+    "type": "string",
+    "hint": "用于调用绘图 API 的密钥"
+  },
+  "model": {
+    "description": "绘图模型名",
+    "type": "string",
+    "hint": "接口支持的绘图模型名称"
+  },
+  "timeout": {
+    "description": "请求超时（秒）",
+    "type": "int",
+    "hint": "绘图耗时较长，建议 120 以上",
+    "default": 120
+  }
+}

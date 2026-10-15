@@ -1,7 +1,7 @@
 name: astrbot_plugin_ww_image
 display_name: WW画图
-desc: openAI接口文生图/图生图插件。AI 调用 ww_image 后立即返回，图片在后台生成并直接发给用户。
-help: 无需命令，AI 会根据对话自主决定是否调用 ww_image。
+desc: openAI接口，后台文生图/图生图。
+help: 装上填下配置剩下的让AI干。
 version: 1.0.0
 author: ww
 astrbot_version: ">=4.16,<5"

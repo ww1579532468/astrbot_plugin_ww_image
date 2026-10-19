@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 
 from astrbot.api import llm_tool, logger
+from astrbot.core.provider.register import llm_tools
 from astrbot.api.event import AstrMessageEvent, MessageChain
 from astrbot.api.message_components import Image, Plain
 from astrbot.api.star import Context, Star, register
@@ -23,12 +24,12 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 PLUGIN_NAME = "astrbot_plugin_ww_image"
 PLUGIN_AUTHOR = "ww"
-PLUGIN_VERSION = "1.0.0"
+PLUGIN_VERSION = "1.1.0"
 
 DEFAULT_CONFIG = {
     "base_url": "",
     "api_key": "",
-    "model": "",
+    "models": "",
     "timeout": 120,
 }
 
@@ -69,7 +70,11 @@ class WWImagePlugin(Star):
 
         self.base_url = str(cfg["base_url"] or "").rstrip("/")
         self.api_key = str(cfg["api_key"] or "").strip()
-        self.model = str(cfg["model"] or "").strip()
+        self.models = self._parse_models(cfg.get("models", ""))
+        if not self.models and cfg.get("model"):
+            self.models = self._parse_models(cfg.get("model", ""))
+        self.default_model = self.models[0] if self.models else ""
+        self._update_tool_description()
         try:
             self.timeout = max(1, int(float(str(cfg["timeout"] or 120))))
         except (TypeError, ValueError):
@@ -78,6 +83,27 @@ class WWImagePlugin(Star):
         self.data_dir = os.path.join(get_astrbot_data_path(), "plugin_data", PLUGIN_NAME)
         self._bg_tasks: set[asyncio.Task] = set()
         self._history_locks: dict[str, asyncio.Lock] = {}
+
+    def _parse_models(self, value: Any) -> List[str]:
+        seen = set()
+        result: List[str] = []
+        for line in str(value or "").splitlines():
+            model = line.strip()
+            if model and model not in seen:
+                seen.add(model)
+                result.append(model)
+        return result
+
+    def _update_tool_description(self) -> None:
+        tool = llm_tools.get_func("ww_image")
+        if not tool:
+            return
+        model_lines = "\n".join(f"- {model}" for model in self.models) or "（未配置）"
+        tool.description = (
+            "AI 画图工具：根据文字描述生成图片。如果用户要求基于其已有图片修改、重绘或换风格，请把该图片地址通过 refs 参数传入，即图生图。"
+            "当前配置的绘图模型：\n" + model_lines +
+            "\n用户明确指定模型时，请通过 model 参数传入；不指定时使用第一个模型。"
+        )
 
     async def terminate(self) -> None:
         for task in list(self._bg_tasks):
@@ -250,11 +276,12 @@ class WWImagePlugin(Star):
             raise RuntimeError("未配置 API 地址（base_url）")
         if not self.api_key:
             raise RuntimeError("未配置 API Key")
-        if not self.model:
-            raise RuntimeError("未配置绘图模型（model）")
+        selected_model = str(extra_params.pop("__model", "") or self.default_model).strip()
+        if not selected_model:
+            raise RuntimeError("未配置绘图模型（models）")
 
         url = f"{self.base_url}/images/generations"
-        payload: Dict[str, Any] = {"model": self.model, "prompt": prompt, "n": 1}
+        payload: Dict[str, Any] = {"model": selected_model, "prompt": prompt, "n": 1}
         if aspect_ratio:
             payload["aspect_ratio"] = aspect_ratio
         if size:
@@ -271,7 +298,7 @@ class WWImagePlugin(Star):
                     data_url = await self._to_data_url(ref, session)
                     key = "image" if index == 1 else f"image{index}"
                     payload[key] = data_url
-            logger.info(f"[WWImage] 请求绘图: {url} model={self.model} refs={len(refs)}")
+            logger.info(f"[WWImage] 请求绘图: {url} model={selected_model} refs={len(refs)}")
             async with session.post(url, json=payload, headers=headers, timeout=timeout_obj) as response:
                 text = await response.text()
                 self._log_api_response(response.status, text)
@@ -456,6 +483,7 @@ class WWImagePlugin(Star):
         prompt: str,
         aspect_ratio: str = "",
         size: str = "",
+        model: str = "",
         extra_params: str = "",
         refs: str = "",
     ) -> str:
@@ -465,6 +493,7 @@ class WWImagePlugin(Star):
             prompt (string): 图片提示词，描述主体、风格、场景、构图和细节。
             aspect_ratio (string): 宽高比例，例如 1:1、3:4、9:16、16:9。
             size (string): 分辨率或尺寸参数，例如 1024x1024。
+            model (string): 本次使用的绘图模型。不填写时使用配置中的第一个模型；填写后直接交给上游 API 判断。
             extra_params (string): 其他模型参数透传，格式为 --key value，可同时传多个。
             refs (string): 参考图片地址，用于图生图/改图。可以是图片 URL、data URL 或本地路径；多张用换行分隔，也可传 JSON 数组字符串。
         """
@@ -476,6 +505,9 @@ class WWImagePlugin(Star):
         umo = str(getattr(event, "unified_msg_origin", "") or "")
         trigger_text = str(getattr(event, "message_str", "") or "")
         extra = self._parse_extra_params(extra_params)
+        selected_model = str(model or "").strip()
+        if selected_model:
+            extra["__model"] = selected_model
         provider_id = await self._snapshot_provider_id(umo) if umo else None
         cid = await self._snapshot_cid(umo) if umo else None
 
@@ -494,3 +526,4 @@ class WWImagePlugin(Star):
             )
         )
         return TOOL_RETURN_TO_MAIN_LLM
+

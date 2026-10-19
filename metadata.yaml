@@ -2,7 +2,8 @@ name: astrbot_plugin_ww_image
 display_name: WW画图
 desc: openAI接口，后台文生图/图生图。
 help: 装上填下配置剩下的让AI干。
-version: 1.0.0
+version: 1.1.0
 author: ww
 astrbot_version: ">=4.16,<5"
 repo: https://github.com/ww1579532468/astrbot_plugin_ww_image
+

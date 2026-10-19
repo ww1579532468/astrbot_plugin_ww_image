@@ -9,10 +9,10 @@
     "type": "string",
     "hint": "用于调用绘图 API 的密钥"
   },
-  "model": {
-    "description": "绘图模型名",
-    "type": "string",
-    "hint": "接口支持的绘图模型名称"
+  "models": {
+    "description": "绘图模型列表",
+    "type": "text",
+    "hint": "一行填写一个模型名，第一个有效模型为默认模型"
   },
   "timeout": {
     "description": "请求超时（秒）",
